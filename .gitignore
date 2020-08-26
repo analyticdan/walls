@@ -1,2 +1,5 @@
 *.DS_Store
+
+# Ignore all database files, except the README.
 database/*
+!database/README.md

@@ -1,0 +1,3 @@
+This is just here to ensure that this directory exists. Feel free to ignore... Or read to your heart's content. I don't mind. Really. I swear.
+
+On the public version control system that this project uses, this directory should otherwise be empty. It may not be wise to publish the information in your database to a public repo... But you can do as you please. I'm not going to do anything about it. It's not like I really could do anything about it...
