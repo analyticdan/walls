@@ -19,24 +19,14 @@ Use mutexes around DB. (Or transactions. Or whatever they taught in CS168/CS162.
 Implement schema for keeping track of messages.
 */
 
+var db *sql.DB
+
 func serverError(w http.ResponseWriter, code int, msg string) {
 	msg = fmt.Sprintf("Internal server failure. Please try again.\n" +
 		              "Internal error message:\n%s", msg)
 	http.Error(w, msg, code)
 }
 
-// Checks if a user with the username USERNAME exists in the database.
-func userExists(username string) (exists bool, err error) {
-	rows, err := db.Query("SELECT * FROM users WHERE username = ?;", username)
-	if err != nil {
-		return
-	}
-	exists = rows.Next()
-	rows.Close()
-	return
-}
-
-var db *sql.DB
 func signupHandler(w http.ResponseWriter, r *http.Request) {
 	// Fetch signup template.
 	tmpl, err := template.ParseFiles("templates/signup.html")
