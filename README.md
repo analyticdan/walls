@@ -1,5 +1,6 @@
 # walls
-walls is a toy social network written in Go... and HTML... But mostly Go. (There is a lot more front-end work to go before this is anywhere near good.)
+walls is a toy social network written in Go... and HTML... But mostly Go.
+(There is a lot more front-end work to go before this is anywhere near good.)
 
 walls is currently in deep alpha development.
 
