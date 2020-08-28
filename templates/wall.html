@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+	<body>
+		{{if .LoggedIn}}
+		<form method="post">
+			<textarea name="post" maxlength="140" rows="10" cols="20"></textarea><br>
+			<input type="submit" value="Post">
+		</form>
+		{{else}}
+		<a href="/signup">Sign up</a> or <a href="/login">login</a> to be able to post on <i>{{.Owner}}</i>'s wall!<br>
+		{{end}}
+
+		{{if .Posts}}
+			{{range .Posts}}
+				<a href="/{{.From}}">{{.From}}</a> said:<br>
+				{{.Body}}<br>
+			{{end}}
+		{{else}}
+		No one has posted on {{.Owner}}'s wall yet. Be the first!
+		{{end}}
+	</body>
+</html>

@@ -1,30 +1,32 @@
 package main
 
 import (
-	"log"
 	"fmt"
-	//"time"
+	"log"
+	"regexp"
 	"strconv"
+	"strings"
 	"net/http"
 	"database/sql"
 	"html/template"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 /*
-Implement cookies.
+Add logout.
+Standardize HTML header.
 Use mutexes around DB. (Or transactions. Or whatever they taught in CS168/CS162.)
-Implement schema for keeping track of messages.
 */
 
 var db *sql.DB
 
 /* Serves a server error message to the client. */
-func serverError(w http.ResponseWriter, msg string) {
-	http.Error(w, fmt.Sprintf("Internal server failure. Please try again.\nInternal error message: %s", msg), 500)
+func serverError(w http.ResponseWriter, err error, msg string) {
+	log.Printf("Error: %s\nInternal error message: %s\n", msg, err)
+	http.Error(w, "Internal server failure. Please try again.", 500)
 }
 
 /*
@@ -48,8 +50,8 @@ func setCookies(w http.ResponseWriter, uid int) error {
 		return err
 	}
 	// Notify client of new cookies.
-	http.SetCookie(w, &http.Cookie{Name: "uid", Value: strconv.Itoa(uid)})
-	http.SetCookie(w, &http.Cookie{Name: "sid", Value: sid})
+	http.SetCookie(w, &http.Cookie{Name: "uid", Value: strconv.Itoa(uid), Path: "/"})
+	http.SetCookie(w, &http.Cookie{Name: "sid", Value: sid, Path: "/"})
 	return nil
 }
 
@@ -75,7 +77,7 @@ func validateCookies(r *http.Request) (bool, int) {
 	}
 	sid := sidCookie.Value
 	// Query database to see if cookies are valid.
-	rows, err := db.Query("SELECT uid FROM cookies WHERE uid = ? AND sid = ?;", uid, sid)
+	rows, err := db.Query("SELECT * FROM cookies WHERE uid = ? AND sid = ?;", uid, sid)
 	if err != nil {
 		return false, 0
 	}
@@ -83,136 +85,262 @@ func validateCookies(r *http.Request) (bool, int) {
 	return rows.Next(), uid
 }
 
-/*
-	Serves the HTML page for signups.
-*/
+/* Fields to fill in signup template. */
+type SignupTemplate struct {
+	Message template.HTML
+	DefaultUsername string
+}
+
+/* Serves the HTML page for signups. */
 func signupHandler(w http.ResponseWriter, r *http.Request) {
 	// If client is already signed in, redirect home.
-	current, _ := validateCookies(r)
-	if current {
+	isLoggedIn, _ := validateCookies(r)
+	if isLoggedIn {
 		http.Redirect(w, r, "/", 307)
+		return
 	}
 	// Serve signup page by using template and filling in data.
 	tmpl, err := template.ParseFiles("templates/signup.html")
 	if err != nil {
-		serverError(w, "Could not parse template: signup.html")
+		serverError(w, err, "could not parse template 'signup.html'.")
+		return
 	}
-	data := struct{
-		Message template.HTML
-		DefaultUsername string
-	}{}
-	// Customize HTML based on form data and do backend (on non-GET requests).
-	if r.Method != http.MethodGet {
+	data := SignupTemplate{}
+	// Receive form data on POST (and use it to populate the template).
+	if r.Method == http.MethodPost {
 		err = r.ParseForm()
 		if err != nil {
-			serverError(w, "Could not parse HTTP form: signup")
+			serverError(w, err, "could not parse HTTP form 'signup'.")
 			return
 		}
 		username := r.FormValue("username")
 		password := r.FormValue("password")
-		if len(username) >= 256 {
-			data.Message = "Usernames cannot be longer than 255 characters."
+		ok, err := regexp.MatchString("^[A-Za-z0-9_]*$", username)
+		if err != nil {
+			serverError(w, err, "could not check username against regex.")
+			return
+		} else if !ok {
+			data.Message = "Usernames must only consist of " +
+				"letters, numbers, and underscores.<br>" +
+				"Please try a different username."
+			data.DefaultUsername = username
+		} else if len(username) == 0 || len(username) >= 256 {
+			data.Message = "Usernames must be between " +
+				"1 and 255 characters in length (inclusive).<br>" +
+				"Please try a different username."
 		} else {
 			rows, err := db.Query("SELECT * FROM users WHERE username = ?;", username)
 			if err != nil {
-				serverError(w, "Database failed searching for user")
+				serverError(w, err, "failed searching database for user data.")
 				return
 			}
 			defer rows.Close()
 			if rows.Next() {
-				data.Message = "Username already in use. Please try a different username."
+				data.Message = "That username already in use. " +
+					"Please try a different username."
 				data.DefaultUsername = username
 			} else {
 				hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 				if err != nil {
-					serverError(w, "Server was unable to encrypt password")
+					serverError(w, err, "could not encrypt password")
 					return
 				}
 				_, err = db.Exec("INSERT INTO users(uid, username, hash) VALUES (NULL, ?, ?);", username, string(hash))
 				if err != nil {
-					serverError(w, "Database could not store profile")
+					serverError(w, err, "could not store user data in database")
 					return
 				}
-				data.Message = "Profile created successfully! Please <a href=\"/login\">login</a>."
+				data.Message = "Profile created successfully!<br>" +
+					"Please <a href=\"/login\">login</a>."
 			}
 		}
 	}
 	tmpl.Execute(w, data)
 }
 
-/*
-	Serves the HTML page for logins.
-*/
+/* Fields to fill in login template. */
+type LoginTemplate struct {
+	Message string
+	DefaultUsername string
+}
+
+/* Serves the HTML page for logins. */
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// If client is already signed in, redirect home.
-	current, _ := validateCookies(r)
-	if current {
+	isLoggedIn, _ := validateCookies(r)
+	if isLoggedIn {
 		http.Redirect(w, r, "/", 307)
+		return
 	}
 	// Serve login page by using template and filling in data.
 	tmpl, err := template.ParseFiles("templates/login.html")
 	if err != nil {
-		serverError(w, "Could not parse template: login.html")
+		serverError(w, err, "could not parse template 'signup.html'.")
+		return
 	}
-	data := struct{
-		Message         string
-		DefaultUsername string
-	}{}
-	// Customize HTML based on form data and do backend (on non-GET requests).
-	if r.Method != http.MethodGet {
+	data := LoginTemplate{}
+	// Receive form data on POST (and use it to populate the template).
+	if r.Method == http.MethodPost {
 		err = r.ParseForm()
 		if err != nil {
-			serverError(w, "Could not parse HTTP form: login")
+			serverError(w, err, "could not parse HTTP form 'signup'.")
 			return
 		}
 		username := r.FormValue("username")
 		password := r.FormValue("password")
-		// Check database to see if username exists.
 		rows, err := db.Query("SELECT uid, hash FROM users WHERE username = ?;", username)
 		if err != nil {
-			serverError(w, "Database failed searching for user")
+			serverError(w, err, "failed searching database for user data.")
 			return
 		}
 		defer rows.Close()
+		data.Message = "Invalid username/password."
+		data.DefaultUsername = username
 		if rows.Next() {
 			var uid int
 			var hash string
 			err = rows.Scan(&uid, &hash)
 			if err != nil {
-				serverError(w, "Database failed fetching user info")
+				serverError(w, err, "failed scanning database for user data")
 				return
-			} else if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
+			}
+			err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+			if err == nil {
 				rows.Close()
 				err := setCookies(w, uid)
 				if err != nil {
-					serverError(w, "Database failed setting cookies")
+					serverError(w, err, "could not set cookies")
 					return
 				}
 				http.Redirect(w, r, "/", 307)
 				return
-			} else {
-				data.Message = "Invalid username/password."
-				data.DefaultUsername = username
 			}
-		} else {
-			data.Message = "Invalid username/password."
-			data.DefaultUsername = username
 		}
 	}
 	tmpl.Execute(w, data)
 }
 
-func defaultHandler(w http.ResponseWriter, r *http.Request) {
-	current, uid := validateCookies(r)
-	if r.URL.Path == "/" {
-		if current {
-			fmt.Fprintf(w, fmt.Sprintf("User id: %d already logged in", uid))
-		} else {
-			http.ServeFile(w, r, "templates/index.html")
+type Post struct {
+	From string
+	Body string
+	Date string
+}
+
+type WallTemplate struct {
+	LoggedIn bool
+	Owner string
+	Posts []Post
+}
+
+/* Serves HTML page for walls. */
+func wallHandler(w http.ResponseWriter, r *http.Request) {
+	// Serve login page by using template and filling in data.
+	tmpl, err := template.ParseFiles("templates/wall.html")
+	if err != nil {
+		serverError(w, err, "could not parse template 'wall.html'.")
+		return
+	}
+	// Gather necessary data to populate template.
+	isLoggedIn, visitorUID := validateCookies(r)
+	ownerUsername := strings.Trim(r.URL.Path, "/")
+	ownerUID, err := findUID(ownerUsername)
+	if err != nil {
+		serverError(w, err, "could not find wall's uid from username")
+		return
+	} else if ownerUID == 0 {
+		http.ServeFile(w, r, "static/walldne.html")
+	}
+	// Initialize data struct with which to fill out template.
+	data := WallTemplate{LoggedIn: isLoggedIn, Owner: ownerUsername}
+	// Receive form data on POST (and store new posts, if necessary).
+	if r.Method == http.MethodPost {
+		err = r.ParseForm()
+		if err != nil {
+			serverError(w, err, "could not parse HTTP form 'wall'.")
+			return
 		}
+		post := r.FormValue("post")
+		if len(post) >= 1 && len(post) < 141 {
+			_, err = db.Exec("INSERT INTO posts(from_uid, to_uid, body, date) VALUES (?, ?, ?, datetime('now'));", visitorUID, ownerUID, post)
+			if err != nil {
+				serverError(w, err, "could not store post in database.")
+				return
+			}
+		}
+	}
+	// Populate data with wall posts.
+	rows, err := db.Query("SELECT from_uid, body, date FROM posts WHERE to_uid = ? ORDER BY date DESC LIMIT ?;", ownerUID, 20)
+	if err != nil {
+		serverError(w, err, "could not fetch posts")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var fromUID int
+		var body string
+		var date string
+		err = rows.Scan(&fromUID, &body, &date)
+		if err != nil {
+			serverError(w, err, "failed scanning database for posts")
+			return
+		}
+		fromUsername, err := findUsername(fromUID)
+		if err != nil {
+			serverError(w, err, "could not find poster's username from uid")
+			return
+		}
+		data.Posts = append(data.Posts, Post{From: fromUsername, Body: body, Date: date})
+	}
+	tmpl.Execute(w, data)
+}
+
+func findUsername(uid int) (username string, err error) {
+	rows, err := db.Query("SELECT username FROM users WHERE uid = ? LIMIT 1;", uid)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		err = rows.Scan(&username)
+	}
+	return
+}
+
+func findUID(username string) (uid int, err error) {
+	rows, err := db.Query("SELECT uid FROM users WHERE username = ? LIMIT 1;", username)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		err = rows.Scan(&uid)
+	}
+	return
+}
+
+func defaultHandler(w http.ResponseWriter, r *http.Request) {
+	isLoggedIn, uid := validateCookies(r)
+	if r.URL.Path == "/" {
+		if isLoggedIn {
+			username, err := findUsername(uid)
+			if err != nil {
+				serverError(w, err, "could not match uid to username")
+			} else {
+				http.Redirect(w, r, fmt.Sprintf("/%s", username), 307)
+			}
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFile(w, r, "static/index.html")
+		}
+		return
+	}
+	// Handle wall.
+	isWall, err := regexp.MatchString("^/[A-Za-z0-9_]+[/]?$", r.URL.Path)
+	if err != nil {
+		serverError(w, err, "could not match URL against regex.")
+	} else if isWall {
+		wallHandler(w, r)
 	} else {
-		fmt.Fprintf(w, r.URL.Path)
-		/* Serve profiles. Don't just print the path. */
+		http.NotFound(w, r)
 	}
 }
 
@@ -234,10 +362,15 @@ func main() {
 	if (err != nil) {
 		log.Fatal(err)
 	}
+	// Create posts table if it doesn't exist.
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS posts(from_uid INTEGER, to_uid INTEGER, body VARCHAR(255), date DATETIME);")
+	if (err != nil) {
+		log.Fatal(err)
+	}
 	// Register handlers.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/signup", signupHandler)
-	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/signup/", signupHandler)
+	mux.HandleFunc("/login/", loginHandler)
 	mux.HandleFunc("/", defaultHandler)
 	// Start listening and serving.
 	s := &http.Server{Addr: ":8080", Handler: mux}

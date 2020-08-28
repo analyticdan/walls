@@ -3,7 +3,7 @@
 	<body>
 		<h1>Sign Up</h1>
 		{{if .Message}}
-			{{.Message}}<br>
+			<i>{{.Message}}<br></i>
 		{{end}}
 		<form method="post">
             <input type="text" name="username" value="{{.DefaultUsername}}" placeholder="Username"><br>
