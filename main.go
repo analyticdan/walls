@@ -253,7 +253,7 @@ func wallHandler(w http.ResponseWriter, r *http.Request) {
 	// Initialize data struct with which to fill out template.
 	data := WallTemplate{LoggedIn: isLoggedIn, Owner: ownerUsername}
 	// Receive form data on POST (and store new posts, if necessary).
-	if r.Method == http.MethodPost {
+	if isLoggedIn && r.Method == http.MethodPost {
 		err = r.ParseForm()
 		if err != nil {
 			serverError(w, err, "could not parse HTTP form 'wall'.")
