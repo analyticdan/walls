@@ -3,7 +3,7 @@ walls is a toy social network written in Go... and HTML... But mostly Go.
 
 (There is a lot more front-end work to go before this is anywhere near good.)
 
-walls is currently in deep alpha development.
+walls is currently in alpha development. It may have problems with race conditions. (It most definitely has problems with race conditions, particularly database race conditions.)
 
 walls' main draw is the ability to write on other users' "walls." You can create an account and invites your friends to write on your wall! Perhaps you might write on your friends' wall as well!
 
