@@ -17,7 +17,6 @@ var db *sql.DB
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	// Only handle "/".
-	fmt.Println(r.URL.Path)
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
