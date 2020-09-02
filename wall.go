@@ -42,7 +42,7 @@ func wallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Gather data for handling this HTTP request.
 	isLoggedIn := validateCookies(r) == nil
-	ownerUsername := strings.Trim(r.URL.Path, "/wall/")
+	ownerUsername := strings.Split(r.URL.Path, "/")[2]
 	ownerUID, err := findUID(ownerUsername)
 	if err != nil {
 		serverError(w, err, "failed locating wall's uid from username")
