@@ -10,8 +10,6 @@ import (
 )
 
 /*
-Add logout.
-Standardize HTML header (no-cache).
 Use mutexes around DB. (Or transactions. Or whatever they taught in CS168/CS162.) Many such race conditions.
 */
 
