@@ -17,6 +17,7 @@ var db *sql.DB
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	// Only handle "/".
+	fmt.Println(r.URL.Path)
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
@@ -24,25 +25,21 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	// Set no-cache header.
 	w.Header().Set("Cache-Control", "no-cache")
 	// Serve different pages based on log in status.
-	isLoggedIn, err := validateCookies(r)
-	if err != nil {
-		serverError(w, err, "could not validate cookies.")
-		return
-	} else if isLoggedIn {
-		uid, err := getUID(r)
-		if err != nil {
-			serverError(w, err, "could not get UID from cookies.")
-			return
-		}
-		username, err := findUsername(uid)
-		if err != nil {
-			serverError(w, err, "could not match uid to username")
-			return
-		}
-		http.Redirect(w, r, fmt.Sprintf("/wall/%s", username), 307)
-	} else {
+	if validateCookies(r) != nil {
 		http.ServeFile(w, r, "static/index.html")
+		return
 	}
+	uid, err := getUID(r)
+	if err != nil {
+		serverError(w, err, "could not get uid from cookies.")
+		return
+	}
+	username, err := findUsername(uid)
+	if err != nil {
+		serverError(w, err, "could not match uid to username")
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/wall/%s", username), 307)
 	return
 }
 

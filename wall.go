@@ -41,16 +41,7 @@ func wallHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Gather data for handling this HTTP request.
-	isLoggedIn, err := validateCookies(r)
-	if err != nil {
-		serverError(w, err, "could not validate cookies.")
-		return
-	}
-	visitorUID, err := getUID(r)
-	if err != nil {
-		serverError(w, err, "could not get UID from cookies.")
-		return
-	}
+	isLoggedIn := validateCookies(r) == nil
 	ownerUsername := strings.Trim(r.URL.Path, "/wall/")
 	ownerUID, err := findUID(ownerUsername)
 	if err != nil {
@@ -63,6 +54,11 @@ func wallHandler(w http.ResponseWriter, r *http.Request) {
 	data := WallTemplate{LoggedIn: isLoggedIn, Owner: ownerUsername}
 	// Process potential new wall posts on POST.
 	if isLoggedIn && r.Method == http.MethodPost {
+		visitorUID, err := getUID(r)
+		if err != nil {
+			serverError(w, err, "could not get UID from cookies.")
+			return
+		}
 		err = r.ParseForm()
 		if err != nil {
 			serverError(w, err, "could not parse HTTP form 'wall'.")

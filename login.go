@@ -54,11 +54,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// Set no-cache header.
 	w.Header().Set("Cache-Control", "no-cache")
 	// If the client is already logged in, redirect home.
-	isLoggedIn, err := validateCookies(r)
-	if err != nil {
-		serverError(w, err, "could not validate cookies.")
-		return
-	} else if isLoggedIn {
+	if validateCookies(r) == nil {
 		http.Redirect(w, r, "/", 307)
 		return
 	}
@@ -117,7 +113,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	sid, _ := getSID(r)
-	_, _ = db.Exec("DELETE FROM cookies WHERE sid = ?", sid)
+	sid, err := getSID(r)
+	if err == nil {
+		_, _ = db.Exec("DELETE FROM cookies WHERE sid = ?", sid)
+	}
 	http.Redirect(w, r, "/", 307)
 }

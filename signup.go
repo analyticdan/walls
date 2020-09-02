@@ -19,11 +19,7 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 	// Set no-cache header.
 	w.Header().Set("Cache-Control", "no-cache")
 	// If the client is already logged in, redirect home.
-	isLoggedIn, err := validateCookies(r)
-	if err != nil {
-		serverError(w, err, "could not validate cookies.")
-		return
-	} else if isLoggedIn {
+	if validateCookies(r) == nil {
 		http.Redirect(w, r, "/", 307)
 		return
 	}

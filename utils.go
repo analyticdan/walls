@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"strconv"
 	"net/http"
@@ -12,22 +13,25 @@ func serverError(w http.ResponseWriter, err error, msg string) {
 	http.Error(w, "Internal server failure. Please try again.", 500)
 }
 
-func validateCookies(r *http.Request) (bool, error) {
+func validateCookies(r *http.Request) (err error) {
 	uid, err := getUID(r)
 	if err != nil {
-		return false, err
+		return
 	}
 	sid, err := getSID(r)
 	if err != nil {
-		return false, err
+		return
 	}
 	stmt := "SELECT * FROM cookies WHERE uid = ? AND sid = ?;"
 	rows, err := db.Query(stmt, uid, sid)
 	if err != nil {
-		return false, err
+		return
 	}
 	defer rows.Close()
-	return rows.Next(), err
+	if !rows.Next() {
+		err = errors.New("Invalid cookie from client")
+	}
+	return
 }
 
 func getUID(r *http.Request) (uid int, err error) {
