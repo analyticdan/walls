@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html>
 	<body>
+		<h1><i>{{.Owner}}'s wall</i></h1>
 		{{if .LoggedIn}}
 		<form method="post">
 			<textarea name="post" maxlength="140" rows="10" cols="20"></textarea><br>
 			<input type="submit" value="Post">
 		</form>
 		{{else}}
-		<a href="/signup">Sign up</a> or <a href="/login">login</a> to be able to post on <i>{{.Owner}}</i>'s wall!<br>
+		<h2>
+			<a href="/login">Log in</a> or <a href="/signup">sign up</a> to be able to post on <i>{{.Owner}}</i>'s wall!
+		</h1>
+		<br>
 		{{end}}
 
 		{{if .Posts}}
@@ -17,6 +21,10 @@
 			{{end}}
 		{{else}}
 		No one has posted on {{.Owner}}'s wall yet. Be the first!
+		{{end}}
+
+		{{if .LoggedIn}}
+		<p style="position: absolute; bottom: 0px; width: 100%; text-align: center;"><a href="/logout">Log out?</a></p>
 		{{end}}
 	</body>
 </html>

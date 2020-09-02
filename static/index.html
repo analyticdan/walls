@@ -1,7 +1,34 @@
 <!DOCTYPE html>
 <html>
 	<body>
-		<a href="login">login</a><br>
-		<a href="signup">signup</a>
+		<table style="width: 100%; border: 1px solid black;">
+			<tr>
+				<td>
+					<i>walls.</i>
+				</td>
+				<td style="text-align: right">
+					<form method="post" action="login">
+			            <input type="text" name="username" size="14" placeholder="Username">
+			            <input type="password" name="password" size="14" placeholder="Password">
+			            <input type="submit" value="Login">
+			        </form>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<img src="/imgs/logo.png" width="24" height="24">
+				</td>
+				<td style="text-align: right">
+					Need an account? <a href="/signup">Sign up today.</a>
+				</td>
+			</tr>
+		</table>
+		<br>
+		<p>
+			Welcome to <i>walls</i>, your one-stop-shop for hanging out.
+		</p>
+		<p>
+			If you have an account, feel free to <a href="/login">log in</a>. Otherwise, <a href="/signup">sign up</a> for a free account today.
+		</p>
 	</body>
 </html>

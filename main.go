@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"regexp"
 	"net/http"
 	"database/sql"
 
@@ -13,36 +12,40 @@ import (
 /*
 Add logout.
 Standardize HTML header (no-cache).
-Use mutexes around DB. (Or transactions. Or whatever they taught in CS168/CS162.)
+Use mutexes around DB. (Or transactions. Or whatever they taught in CS168/CS162.) Many such race conditions.
 */
 
 var db *sql.DB
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
-	isLoggedIn, uid := validateCookies(r)
-	if r.URL.Path == "/" {
-		if isLoggedIn {
-			username, err := findUsername(uid)
-			if err != nil {
-				serverError(w, err, "could not match uid to username")
-			} else {
-				http.Redirect(w, r, fmt.Sprintf("/%s", username), 307)
-			}
-		} else {
-			w.Header().Set("Cache-Control", "no-cache")
-			http.ServeFile(w, r, "static/index.html")
-		}
+	// Only handle "/".
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
 		return
 	}
-	// Handle wall.
-	isWall, err := regexp.MatchString("^/[A-Za-z0-9_]+[/]?$", r.URL.Path)
+	// Set no-cache header.
+	w.Header().Set("Cache-Control", "no-cache")
+	// Serve different pages based on log in status.
+	isLoggedIn, err := validateCookies(r)
 	if err != nil {
-		serverError(w, err, "could not match URL against regex.")
-	} else if isWall {
-		wallHandler(w, r)
+		serverError(w, err, "could not validate cookies.")
+		return
+	} else if isLoggedIn {
+		uid, err := getUID(r)
+		if err != nil {
+			serverError(w, err, "could not get UID from cookies.")
+			return
+		}
+		username, err := findUsername(uid)
+		if err != nil {
+			serverError(w, err, "could not match uid to username")
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/wall/%s", username), 307)
 	} else {
-		http.NotFound(w, r)
+		http.ServeFile(w, r, "static/index.html")
 	}
+	return
 }
 
 func main() {
@@ -68,11 +71,16 @@ func main() {
 	if (err != nil) {
 		log.Fatal(err)
 	}
+
 	// Register handlers.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/signup/", signupHandler)
-	mux.HandleFunc("/login/", loginHandler)
+	mux.Handle("/imgs/", http.FileServer(http.Dir(".")))
+	mux.HandleFunc("/wall/", wallHandler)
+	mux.HandleFunc("/signup", signupHandler)
+	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/logout", logoutHandler)
 	mux.HandleFunc("/", defaultHandler)
+	
 	// Start listening and serving.
 	s := &http.Server{Addr: ":8080", Handler: mux}
 	log.Fatal(s.ListenAndServe())

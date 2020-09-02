@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"net/http"
 	"html/template"
@@ -22,37 +23,53 @@ type WallTemplate struct {
 
 /* Serves a user's wall. */
 func wallHandler(w http.ResponseWriter, r *http.Request) {
+	// Assert that the request is really for a wall.
+	isWall, err := regexp.MatchString("^/wall/[A-Za-z0-9_]+[/]?$", r.URL.Path)
+	if err != nil {
+		serverError(w, err, "could not match URL against regex.")
+		return
+	} else if !isWall {
+		http.NotFound(w, r)
+		return
+	}
+	// Set no-cache header.
+	w.Header().Set("Cache-Control", "no-cache")
 	// Ready the login page template.
 	tmpl, err := template.ParseFiles("templates/wall.html")
 	if err != nil {
 		serverError(w, err, "could not parse template 'wall.html'.")
 		return
 	}
-	// Gather data for and initialize the data struct.
-	loggedIn, visitorUID := validateCookies(r)
-	ownerUsername := strings.Trim(r.URL.Path, "/")
+	// Gather data for handling this HTTP request.
+	isLoggedIn, err := validateCookies(r)
+	if err != nil {
+		serverError(w, err, "could not validate cookies.")
+		return
+	}
+	visitorUID, err := getUID(r)
+	if err != nil {
+		serverError(w, err, "could not get UID from cookies.")
+		return
+	}
+	ownerUsername := strings.Trim(r.URL.Path, "/wall/")
 	ownerUID, err := findUID(ownerUsername)
 	if err != nil {
 		serverError(w, err, "failed locating wall's uid from username")
 		return
 	} else if ownerUID == 0 {
-		// This user Does Not Exist. Serve the static page saying such.
 		http.ServeFile(w, r, "static/walldne.html")
+		return
 	}
-	data := WallTemplate{LoggedIn: loggedIn, Owner: ownerUsername}
-	// Receive form data on POST (and store new posts, if necessary).
-	if loggedIn && r.Method == http.MethodPost {
-		// Parse post.
+	data := WallTemplate{LoggedIn: isLoggedIn, Owner: ownerUsername}
+	// Process potential new wall posts on POST.
+	if isLoggedIn && r.Method == http.MethodPost {
 		err = r.ParseForm()
 		if err != nil {
 			serverError(w, err, "could not parse HTTP form 'wall'.")
 			return
 		}
-		// It is okay to store this unescaped because the sql and http/template
-		// libraries will escape it for us.
 		post := r.FormValue("post")
-		// Only store posts of 140 characters or less (and 1 or more).
-		if len(post) >= 1 && len(post) < 141 {
+		if len(post) != 0 && len(post) < 141 {
 			stmt := "INSERT INTO posts(from_uid, to_uid, body, date) VALUES (?, ?, ?, datetime('now'));"
 			_, err = db.Exec(stmt, visitorUID, ownerUID, post)
 			if err != nil {
@@ -61,12 +78,12 @@ func wallHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// Populate data (and thereby web page) with up to 20
-	// of the wall owner's most recent wall posts.
-	stmt := "SELECT from_uid, body FROM posts WHERE to_uid = ? ORDER BY date DESC LIMIT ?;"
-	rows, err := db.Query(stmt, ownerUID, 20)
+	// Populate page with up to 20 of the most recent wall posts.
+	stmt := "SELECT from_uid, body FROM posts WHERE to_uid = ? ORDER BY date DESC LIMIT 20;"
+	rows, err := db.Query(stmt, ownerUID)
 	if err != nil {
 		serverError(w, err, "could not fetch posts")
+		return
 	}
 	defer rows.Close()
 	for rows.Next() {

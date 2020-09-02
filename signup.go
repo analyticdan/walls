@@ -16,9 +16,14 @@ type SignupTemplate struct {
 
 /* Serves the signup page. */
 func signupHandler(w http.ResponseWriter, r *http.Request) {
-	// If client is already logged in, redirect home.
-	loggedIn, _ := validateCookies(r)
-	if loggedIn {
+	// Set no-cache header.
+	w.Header().Set("Cache-Control", "no-cache")
+	// If the client is already logged in, redirect home.
+	isLoggedIn, err := validateCookies(r)
+	if err != nil {
+		serverError(w, err, "could not validate cookies.")
+		return
+	} else if isLoggedIn {
 		http.Redirect(w, r, "/", 307)
 		return
 	}

@@ -12,34 +12,41 @@ func serverError(w http.ResponseWriter, err error, msg string) {
 	http.Error(w, "Internal server failure. Please try again.", 500)
 }
 
-/*
-	Returns true and the uid of the current session if the server sucessfully
-	confirms that the cookies from R are linked to a valid, current session.
-	Returns false and some undefined int on errors and on invalid cookies.
-*/
-func validateCookies(r *http.Request) (bool, int) {
-	// Get uid from cookies.
+func validateCookies(r *http.Request) (bool, error) {
+	uid, err := getUID(r)
+	if err != nil {
+		return false, err
+	}
+	sid, err := getSID(r)
+	if err != nil {
+		return false, err
+	}
+	stmt := "SELECT * FROM cookies WHERE uid = ? AND sid = ?;"
+	rows, err := db.Query(stmt, uid, sid)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	return rows.Next(), err
+}
+
+func getUID(r *http.Request) (uid int, err error) {
 	uidCookie, err := r.Cookie("uid")
 	if err != nil {
-		return false, 0
+		return
 	}
-	uid, err := strconv.Atoi(uidCookie.Value)
-	if err != nil {
-		return false, 0
-	}
+	uid, err = strconv.Atoi(uidCookie.Value)
+	return
+}
+
+func getSID(r *http.Request) (sid string, err error) {
 	// Get sid from cookies.
 	sidCookie, err := r.Cookie("sid")
 	if err != nil {
-		return false, 0
+		return
 	}
-	sid := sidCookie.Value
-	// Query database to see if cookies are valid.
-	rows, err := db.Query("SELECT * FROM cookies WHERE uid = ? AND sid = ?;", uid, sid)
-	if err != nil {
-		return false, 0
-	}
-	defer rows.Close()
-	return rows.Next(), uid
+	sid = sidCookie.Value
+	return
 }
 
 /*

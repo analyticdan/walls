@@ -11,14 +11,14 @@ import (
 
 /*
 	Attempts to put (UID, SID) into the cookies table of the database,
-	where SID is a random 32 byte UUID (which takes up 36 bytes, after
-	including hyphens).
+	where SID is a 36 char session id string.
 
-	If insertion into the cookie table was sucessful, writes cookies to W.
-	Otherwise, does nothing and returns a non-nil error.
+	If the insertion into the cookie table was sucessful, this function
+	writes the cookies to W.
+	Otherwise, this function does nothing and returns a non-nil error.
 */
 func setCookies(w http.ResponseWriter, uid int) error {
-	// Generate new session id (UUID).
+	// Generate new session id.
 	sessionid, err := uuid.NewRandom()
 	if err != nil {
 		return err
@@ -51,9 +51,14 @@ type LoginTemplate struct {
 
 /* Serves the login page. */
 func loginHandler(w http.ResponseWriter, r *http.Request) {
+	// Set no-cache header.
+	w.Header().Set("Cache-Control", "no-cache")
 	// If the client is already logged in, redirect home.
-	loggedIn, _ := validateCookies(r)
-	if loggedIn {
+	isLoggedIn, err := validateCookies(r)
+	if err != nil {
+		serverError(w, err, "could not validate cookies.")
+		return
+	} else if isLoggedIn {
 		http.Redirect(w, r, "/", 307)
 		return
 	}
@@ -100,9 +105,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			// Check that the hashed password matches the value in the database.
 			err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 			if err == nil {
-				err = setCookies(w, uid)
-				if err == nil {
-					// Redirect home on sucessful login.
+				if setCookies(w, uid) == nil {
 					http.Redirect(w, r, "/", 307)
 				} else {
 					serverError(w, err, "could not set cookies")
@@ -111,4 +114,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	tmpl.Execute(w, data)
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	sid, _ := getSID(r)
+	_, _ = db.Exec("DELETE FROM cookies WHERE sid = ?", sid)
+	http.Redirect(w, r, "/", 307)
 }
