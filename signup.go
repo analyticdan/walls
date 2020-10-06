@@ -14,40 +14,36 @@ type SignupTemplate struct {
 	DefaultUsername string
 }
 
-/* Serves the signup page. */
 func signupHandler(w http.ResponseWriter, r *http.Request) {
-	// Set no-cache header.
-	w.Header().Set("Cache-Control", "no-cache")
-	// If the client is already logged in, redirect home.
-	if validateCookies(r) == nil {
+	w.Header().Set("Cache-Control", "no-store")
+
+	if isLoggedIn(r) {
 		http.Redirect(w, r, "/", 307)
 		return
 	}
-	// Ready the login page template and the data struct.
+
 	tmpl, err := template.ParseFiles("templates/signup.html")
 	if err != nil {
-		serverError(w, err, "could not parse template 'signup.html'.")
+		serveError(w, err, "could not parse template 'signup.html'.")
 		return
 	}
 	data := SignupTemplate{}
-	// Receive form data on POST (and use it to populate the template).
+
 	if r.Method == http.MethodPost {
-		// Parse POST data.
 		err = r.ParseForm()
 		if err != nil {
-			serverError(w, err, "could not parse HTTP form 'signup'.")
+			serveError(w, err, "could not parse HTTP form 'signup'.")
 			return
 		}
+
 		username := r.FormValue("username")
 		password := r.FormValue("password")
-		// Check that the username is alphanumeric + underscores.
-		// Also check that the username fits in the database [1 and 256).
-		// Password can be any characters whatsoever.
-		ok, err := regexp.MatchString("^[A-Za-z0-9_]*$", username)
+
+		matches, err := regexp.MatchString("^[A-Za-z0-9_]*$", username)
 		if err != nil {
-			serverError(w, err, "could not check username against regex.")
+			serveError(w, err, "could not check username against regex.")
 			return
-		} else if !ok {
+		} else if !matches {
 			data.Message = "Usernames must only consist of " +
 				"letters, numbers, and underscores. " +
 				"Please try a different username."
@@ -57,32 +53,33 @@ func signupHandler(w http.ResponseWriter, r *http.Request) {
 				"1 and 255 characters in length (inclusive). " +
 				"Please try a different username."
 		} else {
-			// Check if the username is already in the database.
 			uid, err := findUID(username)
 			if err != nil {
-				serverError(w, err, "failed finding user data from username.")
+				serveError(w, err, "failed finding user data from username.")
 				return
 			} else if uid != 0 {
 				data.Message = "That username already in use. " +
 					"Please try a different username."
 				data.DefaultUsername = username
 			} else {
-				// User info is okay. Try to insert into the database.
 				hash, err := bcrypt.GenerateFromPassword([]byte(password), 0)
 				if err != nil {
-					serverError(w, err, "could not encrypt password")
+					serveError(w, err, "could not encrypt password")
 					return
 				}
+
 				stmt := "INSERT INTO users(uid, username, hash) VALUES (NULL, ?, ?);"
 				_, err = db.Exec(stmt, username, string(hash))
 				if err != nil {
-					serverError(w, err, "could not store user data in database")
+					serveError(w, err, "could not store user data in database")
 					return
 				}
+
 				data.Message = "Profile created successfully! " +
 					"Please <a href=\"/login\">login</a>."
 			}
 		}
 	}
+	
 	tmpl.Execute(w, data)
 }

@@ -1,37 +1,35 @@
 package main
 
 import (
-	"errors"
 	"log"
 	"strconv"
 	"net/http"
 )
 
-/* Serves a server error message to the client. */
-func serverError(w http.ResponseWriter, err error, msg string) {
+func serveError(w http.ResponseWriter, err error, msg string) {
 	log.Printf("Error: %s\nInternal error message: %s\n", msg, err)
 	http.Error(w, "Internal server failure. Please try again.", 500)
 }
 
-func validateCookies(r *http.Request) (err error) {
+func isLoggedIn(r *http.Request) bool {
 	uid, err := getUID(r)
 	if err != nil {
-		return
+		return false
 	}
+
 	sid, err := getSID(r)
 	if err != nil {
-		return
+		return false
 	}
+
 	stmt := "SELECT * FROM cookies WHERE uid = ? AND sid = ?;"
 	rows, err := db.Query(stmt, uid, sid)
 	if err != nil {
-		return
+		return false
 	}
 	defer rows.Close()
-	if !rows.Next() {
-		err = errors.New("Invalid cookie from client")
-	}
-	return
+
+	return rows.Next()
 }
 
 func getUID(r *http.Request) (uid int, err error) {
@@ -44,7 +42,6 @@ func getUID(r *http.Request) (uid int, err error) {
 }
 
 func getSID(r *http.Request) (sid string, err error) {
-	// Get sid from cookies.
 	sidCookie, err := r.Cookie("sid")
 	if err != nil {
 		return
